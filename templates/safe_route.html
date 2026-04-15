@@ -20,51 +20,127 @@ body {
     font-weight: bold;
 }
 
+.controls {
+    padding: 10px;
+    background: white;
+    display: flex;
+    gap: 10px;
+}
+
+.controls input {
+    padding: 8px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+}
+
+.controls button {
+    padding: 8px 12px;
+    background: #c2185b;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
 #map {
     width: 100%;
-    height: calc(100vh - 50px);
+    height: calc(100vh - 100px);
 }
 </style>
 </head>
 
 <body>
 
-<div class="topbar">🗺️ Safe Route Map</div>
+<div class="topbar">🗺️ Safe Route Finder</div>
+
+<div class="controls">
+    <input id="start" placeholder="Start location">
+    <input id="end" placeholder="End location">
+    <button onclick="findRoute()">Find Route</button>
+</div>
+
 <div id="map"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script>
-// Data from backend
+// Backend data
 const RISK_ZONES = {{ risk_zones | safe }};
 
-// Initialize map
+// Map init
 const map = L.map('map').setView([10.5276, 76.2144], 14);
 
-// Tile layer
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap'
 }).addTo(map);
 
-// Add markers
+// Show risk markers
 RISK_ZONES.forEach(zone => {
-    const score = zone.Risk_Score;
-
     let color = 'green';
-    if (score >= 0.7) color = 'red';
-    else if (score >= 0.4) color = 'orange';
+    if (zone.Risk_Score >= 0.7) color = 'red';
+    else if (zone.Risk_Score >= 0.4) color = 'orange';
 
     L.circleMarker([zone.Latitude, zone.Longitude], {
-        radius: 6,
+        radius: 5,
         color: color,
         fillColor: color,
         fillOpacity: 0.7
-    }).addTo(map)
-    .bindPopup(
-        `<b>${zone.Area_Name}</b><br>
-         Risk Score: ${(score * 100).toFixed(1)}%`
-    );
+    }).addTo(map);
 });
+
+let routeLayer = null;
+
+// ── Geocoding ──
+async function geocode(place) {
+    const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${place}&format=json&limit=1`
+    );
+    const data = await res.json();
+
+    if (!data.length) throw new Error("Location not found");
+
+    return {
+        lat: parseFloat(data[0].lat),
+        lon: parseFloat(data[0].lon)
+    };
+}
+
+// ── Find Route ──
+async function findRoute() {
+    const start = document.getElementById("start").value;
+    const end = document.getElementById("end").value;
+
+    if (!start || !end) {
+        alert("Enter both locations");
+        return;
+    }
+
+    try {
+        const s = await geocode(start);
+        const e = await geocode(end);
+
+        // OSRM API
+        const res = await fetch(
+            `https://router.project-osrm.org/route/v1/driving/${s.lon},${s.lat};${e.lon},${e.lat}?overview=full&geometries=geojson`
+        );
+        const data = await res.json();
+
+        const coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+
+        // Remove old route
+        if (routeLayer) map.removeLayer(routeLayer);
+
+        routeLayer = L.polyline(coords, {
+            color: 'blue',
+            weight: 5
+        }).addTo(map);
+
+        map.fitBounds(routeLayer.getBounds());
+
+    } catch (err) {
+        alert(err.message);
+    }
+}
 </script>
 
 </body>
