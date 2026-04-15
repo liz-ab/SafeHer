@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Women Safety App</title>
+
+<style>
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: Arial, sans-serif;
+    background: linear-gradient(135deg, #ffd6e8, #fff1f7);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.container {
+    text-align: center;
+    background: white;
+    padding: 40px 50px;
+    border-radius: 20px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+}
+
+h1 {
+    color: #c2185b;
+    font-size: 36px;
+    margin-bottom: 12px;
+}
+
+p {
+    color: #666;
+    font-size: 16px;
+    margin-bottom: 25px;
+}
+
+.button-group {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+}
+
+.btn {
+    padding: 12px 20px;
+    border-radius: 10px;
+    border: none;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+.btn-primary {
+    background: #c2185b;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #a31550;
+}
+
+.btn-outline {
+    background: white;
+    color: #c2185b;
+    border: 2px solid #c2185b;
+}
+
+.btn-outline:hover {
+    background: #c2185b;
+    color: white;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+    <h1>🛡️ Women Safety</h1>
+    <p>Helping you find safer places and routes using data</p>
+
+    <div class="button-group">
+        <a href="/dashboard" class="btn btn-primary">📊 Dashboard</a>
+        <a href="/safe-route" class="btn btn-outline">🗺️ Safe Route</a>
+    </div>
+</div>
+
+</body>
+</html>
