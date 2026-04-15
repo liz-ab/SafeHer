@@ -1,36 +1,71 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Safe Route</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background: linear-gradient(135deg, #ffd6e8, #fff1f7);
-            margin: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-        }
+<meta charset="UTF-8">
+<title>Safe Route</title>
 
-        .container {
-            text-align: center;
-        }
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 
-        h1 {
-            color: #c2185b;
-        }
+<style>
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: linear-gradient(135deg, #ffd6e8, #fff1f7);
+}
 
-        p {
-            color: #555;
-        }
-    </style>
+.topbar {
+    background: #c2185b;
+    padding: 12px 20px;
+    color: white;
+    font-weight: bold;
+}
+
+#map {
+    width: 100%;
+    height: calc(100vh - 50px);
+}
+</style>
 </head>
+
 <body>
-    <div class="container">
-        <h1>🗺️ Safe Route</h1>
-        <p>Safe route page setup completed.</p>
-    </div>
+
+<div class="topbar">🗺️ Safe Route Map</div>
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+// Data from backend
+const RISK_ZONES = {{ risk_zones | safe }};
+
+// Initialize map
+const map = L.map('map').setView([10.5276, 76.2144], 14);
+
+// Tile layer
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap'
+}).addTo(map);
+
+// Add markers
+RISK_ZONES.forEach(zone => {
+    const score = zone.Risk_Score;
+
+    let color = 'green';
+    if (score >= 0.7) color = 'red';
+    else if (score >= 0.4) color = 'orange';
+
+    L.circleMarker([zone.Latitude, zone.Longitude], {
+        radius: 6,
+        color: color,
+        fillColor: color,
+        fillOpacity: 0.7
+    }).addTo(map)
+    .bindPopup(
+        `<b>${zone.Area_Name}</b><br>
+         Risk Score: ${(score * 100).toFixed(1)}%`
+    );
+});
+</script>
+
 </body>
 </html>
