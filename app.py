@@ -12,14 +12,12 @@ app = Flask(__name__)
 model = pickle.load(open("risk_model.pkl", "rb"))
 encoders = pickle.load(open("encoders.pkl", "rb"))
 
-# ── Location boundaries ──
 MIN_LAT = 10.480
 MAX_LAT = 10.570
 MIN_LON = 76.180
 MAX_LON = 76.260
 
 
-# ── Load, encode and predict ──
 def get_risk_df():
     df = pd.read_csv("data.csv")
 
@@ -38,7 +36,6 @@ def get_risk_df():
     ]
 
     df["Risk_Score"] = model.predict(X)
-
     return df
 
 
@@ -79,14 +76,11 @@ def dashboard():
         ["Area_Name", "Risk_Score", "Time_Period"]
     ].to_dict(orient="records")
 
-    # ── Heatmap ──
     m = folium.Map(location=[10.5276, 76.2144], zoom_start=14)
-
     heat_data = [
         [row["Latitude"], row["Longitude"], row["Risk_Score"]]
         for _, row in df.iterrows()
     ]
-
     HeatMap(heat_data, radius=30).add_to(m)
 
     os.makedirs("static", exist_ok=True)
@@ -104,7 +98,6 @@ def dashboard():
     )
 
 
-# ── Add Data API ──
 @app.route("/add-data", methods=["POST"])
 def add_data():
     data = request.get_json()
@@ -113,44 +106,75 @@ def add_data():
     lon = float(data["Longitude"])
 
     if not (MIN_LAT <= lat <= MAX_LAT and MIN_LON <= lon <= MAX_LON):
-        return jsonify({
-            "status": "error",
-            "message": "Location outside allowed area"
-        })
-
-    new_row = {
-        "Latitude": lat,
-        "Longitude": lon,
-        "Area_Name": data["Area_Name"],
-        "Time_Period": data["Time_Period"],
-        "Crime_Count": int(data["Crime_Count"]),
-        "Street_Light": data["Street_Light"],
-        "CCTV": data["CCTV"],
-        "Police_Patrol": data["Police_Patrol"],
-        "Isolation_Level": data["Isolation_Level"]
-    }
+        return jsonify({"status": "error"})
 
     df = pd.read_csv("data.csv")
-    df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+    df = pd.concat([df, pd.DataFrame([data])], ignore_index=True)
     df.to_csv("data.csv", index=False)
 
     return jsonify({"status": "success"})
 
 
-# ── Safe Route Page ──
 @app.route("/safe-route")
 def safe_route():
     df = get_risk_df()
 
-    # Send important columns to frontend
     risk_zones = df[
-        ["Latitude", "Longitude", "Area_Name", "Risk_Score"]
+        ["Latitude", "Longitude", "Area_Name", "Risk_Score",
+         "Crime_Count", "Street_Light", "CCTV",
+         "Police_Patrol", "Isolation_Level", "Time_Period"]
     ].to_dict(orient="records")
 
     return render_template(
         "safe_route.html",
         risk_zones=json.dumps(risk_zones)
     )
+
+
+# ── Explainable AI ──
+@app.route("/explain-route", methods=["POST"])
+def explain_route():
+    data = request.get_json()
+    zones = data.get("zones", [])
+
+    if not zones:
+        return jsonify({"summary": "No risky zones detected", "reasons": []})
+
+    df = get_risk_df()
+    names = [z["name"] for z in zones]
+    nearby = df[df["Area_Name"].isin(names)]
+
+    reasons = []
+
+    # Crime
+    if nearby["Crime_Count"].mean() > 5:
+        reasons.append("High crime rate in nearby areas")
+
+    # Lighting
+    if (nearby["Street_Light"] == "Poor").mean() > 0.4:
+        reasons.append("Poor street lighting")
+
+    # CCTV
+    if (nearby["CCTV"] == "No").mean() > 0.5:
+        reasons.append("Lack of CCTV surveillance")
+
+    # Patrol
+    if (nearby["Police_Patrol"] == "Rare").mean() > 0.4:
+        reasons.append("Low police presence")
+
+    # Isolation
+    if (nearby["Isolation_Level"] == "High").mean() > 0.4:
+        reasons.append("Highly isolated areas")
+
+    if not reasons:
+        reasons.append("Moderate combined risk factors")
+
+    summary = f"Route passes through {len(nearby)} risky areas."
+
+    return jsonify({
+        "summary": summary,
+        "reasons": reasons
+    })
 
 
 if __name__ == "__main__":
