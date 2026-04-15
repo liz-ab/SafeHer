@@ -5,6 +5,7 @@ import folium
 from folium.plugins import HeatMap
 import os
 import json
+import numpy as np
 
 app = Flask(__name__)
 
@@ -131,7 +132,6 @@ def safe_route():
     )
 
 
-# ── Explainable AI ──
 @app.route("/explain-route", methods=["POST"])
 def explain_route():
     data = request.get_json()
@@ -146,23 +146,18 @@ def explain_route():
 
     reasons = []
 
-    # Crime
     if nearby["Crime_Count"].mean() > 5:
         reasons.append("High crime rate in nearby areas")
 
-    # Lighting
     if (nearby["Street_Light"] == "Poor").mean() > 0.4:
         reasons.append("Poor street lighting")
 
-    # CCTV
     if (nearby["CCTV"] == "No").mean() > 0.5:
         reasons.append("Lack of CCTV surveillance")
 
-    # Patrol
     if (nearby["Police_Patrol"] == "Rare").mean() > 0.4:
         reasons.append("Low police presence")
 
-    # Isolation
     if (nearby["Isolation_Level"] == "High").mean() > 0.4:
         reasons.append("Highly isolated areas")
 
@@ -177,5 +172,50 @@ def explain_route():
     })
 
 
+# ── Risk Chart API ──
+@app.route("/risk-chart-data")
+def risk_chart_data():
+    df = get_risk_df()
+
+    # 1. Risk distribution
+    df["Risk_Level"] = pd.cut(
+        df["Risk_Score"],
+        bins=[0, 0.4, 0.7, 1.0],
+        labels=["Low", "Medium", "High"]
+    )
+    distribution = df["Risk_Level"].value_counts().to_dict()
+
+    # 2. Avg risk by time
+    by_time = df.groupby("Time_Period")["Risk_Score"].mean().round(3).to_dict()
+
+    # 3. Top 10 areas
+    top10 = (df.sort_values("Risk_Score", ascending=False)
+               .head(10)[["Area_Name", "Risk_Score"]]
+               .to_dict(orient="records"))
+
+    # 4. Histogram
+    counts, edges = np.histogram(df["Risk_Score"], bins=10, range=(0,1))
+    histogram = [
+        {"label": f"{edges[i]:.1f}-{edges[i+1]:.1f}", "count": int(counts[i])}
+        for i in range(len(counts))
+    ]
+
+    # 5. Risk by street light
+    by_light = df.groupby("Street_Light")["Risk_Score"].mean().round(3).to_dict()
+
+    # 6. Risk by patrol
+    by_patrol = df.groupby("Police_Patrol")["Risk_Score"].mean().round(3).to_dict()
+
+    return jsonify({
+        "distribution": distribution,
+        "by_time": by_time,
+        "top10": top10,
+        "histogram": histogram,
+        "by_light": by_light,
+        "by_patrol": by_patrol
+    })
+
+
 if __name__ == "__main__":
     app.run(debug=True)
+    
