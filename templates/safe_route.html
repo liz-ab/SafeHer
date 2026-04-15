@@ -44,7 +44,7 @@ body {
 
 #map {
     width: 100%;
-    height: 60vh;
+    height: 55vh;
 }
 
 .result {
@@ -61,6 +61,26 @@ body {
 
 .safe { background: #e8f5e9; color: #2e7d32; }
 .risky { background: #ffebee; color: #c62828; }
+
+.explain-btn {
+    margin-top: 8px;
+    padding: 8px;
+    width: 100%;
+    background: #880e4f;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.explain-box {
+    margin-top: 10px;
+    padding: 10px;
+    border-radius: 8px;
+    background: #1a1a2e;
+    color: white;
+    font-size: 13px;
+}
 </style>
 </head>
 
@@ -82,7 +102,6 @@ body {
 
 <script>
 const RISK_ZONES = {{ risk_zones | safe }};
-
 const map = L.map('map').setView([10.5276, 76.2144], 14);
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
@@ -97,28 +116,35 @@ RISK_ZONES.forEach(z => {
 
 let routeA = null;
 let routeB = null;
+let riskyZones = [];
 
-// ── distance between points ──
+// distance
 function dist(a,b) {
     return Math.sqrt((a[0]-b[0])**2 + (a[1]-b[1])**2);
 }
 
-// ── score route based on nearby risk zones ──
+// score route
 function scoreRoute(coords) {
     let score = 0;
+    let zones = [];
 
     RISK_ZONES.forEach(zone => {
         coords.forEach(pt => {
             if (dist(pt, [zone.Latitude, zone.Longitude]) < 0.002) {
                 score += zone.Risk_Score;
+                zones.push({
+                    name: zone.Area_Name,
+                    lat: zone.Latitude,
+                    lng: zone.Longitude
+                });
             }
         });
     });
 
-    return score;
+    return {score, zones};
 }
 
-// ── geocode ──
+// geocode
 async function geocode(place) {
     const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${place}&format=json&limit=1`);
     const data = await res.json();
@@ -126,14 +152,14 @@ async function geocode(place) {
     return {lat:+data[0].lat, lon:+data[0].lon};
 }
 
-// ── get route ──
+// route
 async function getRoute(coords) {
     const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`);
     const data = await res.json();
     return data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
 }
 
-// ── main ──
+// main
 async function findRoutes() {
     const s = document.getElementById("start").value;
     const e = document.getElementById("end").value;
@@ -144,46 +170,69 @@ async function findRoutes() {
         const start = await geocode(s);
         const end   = await geocode(e);
 
-        // remove old
         if (routeA) map.removeLayer(routeA);
         if (routeB) map.removeLayer(routeB);
 
-        // direct route
         const direct = await getRoute(`${start.lon},${start.lat};${end.lon},${end.lat}`);
 
-        // midpoint route (slightly different path)
         const midLat = (start.lat + end.lat)/2 + 0.01;
         const midLon = (start.lon + end.lon)/2 + 0.01;
 
         const alt = await getRoute(`${start.lon},${start.lat};${midLon},${midLat};${end.lon},${end.lat}`);
 
-        const scoreA = scoreRoute(direct);
-        const scoreB = scoreRoute(alt);
+        const resA = scoreRoute(direct);
+        const resB = scoreRoute(alt);
 
-        // draw routes
         routeA = L.polyline(direct, {color:'red'}).addTo(map);
         routeB = L.polyline(alt, {color:'green'}).addTo(map);
 
         map.fitBounds(routeA.getBounds());
 
-        // show result
         const result = document.getElementById("result");
 
-        if (scoreA < scoreB) {
-            result.innerHTML = `
-                <div class="card safe">Green route is safer ✅</div>
-                <div class="card risky">Red route is riskier ⚠️</div>
-            `;
+        let safer, risky;
+
+        if (resA.score < resB.score) {
+            safer = "Red route";
+            risky = resB;
         } else {
-            result.innerHTML = `
-                <div class="card safe">Red route is safer ✅</div>
-                <div class="card risky">Green route is riskier ⚠️</div>
-            `;
+            safer = "Green route";
+            risky = resA;
         }
+
+        riskyZones = risky.zones;
+
+        result.innerHTML = `
+            <div class="card safe">${safer} is safer ✅</div>
+            <div class="card risky">Other route is riskier ⚠️</div>
+            <button class="explain-btn" onclick="explain()">🧠 Why is this route risky?</button>
+            <div id="explainBox"></div>
+        `;
 
     } catch(err) {
         alert(err.message);
     }
+}
+
+// explain
+async function explain() {
+    const box = document.getElementById("explainBox");
+    box.innerHTML = "Loading...";
+
+    const res = await fetch("/explain-route", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({zones: riskyZones})
+    });
+
+    const data = await res.json();
+
+    box.innerHTML = `
+        <div class="explain-box">
+            <b>${data.summary}</b><br><br>
+            ${data.reasons.map(r => "• " + r).join("<br>")}
+        </div>
+    `;
 }
 </script>
 
