@@ -1,6 +1,9 @@
 from flask import Flask, render_template, request
 import pandas as pd
 import pickle
+import folium
+from folium.plugins import HeatMap
+import os
 
 app = Flask(__name__)
 
@@ -50,15 +53,24 @@ def dashboard():
 
     df = get_risk_df()
 
-    # Optional filter
     if selected_time != "All":
         df = df[df["Time_Period"] == selected_time]
 
-    # Convert to simple list (for future use)
-    data = df[["Area_Name", "Risk_Score", "Time_Period"]].to_dict(orient="records")
+    # ── Create Heatmap ──
+    m = folium.Map(location=[10.5276, 76.2144], zoom_start=14)
+
+    heat_data = [
+        [row["Latitude"], row["Longitude"], row["Risk_Score"]]
+        for _, row in df.iterrows()
+    ]
+
+    HeatMap(heat_data, radius=30).add_to(m)
+
+    # Save map
+    os.makedirs("static", exist_ok=True)
+    m.save("static/heatmap.html")
 
     return render_template("dashboard.html",
-                           data=data,
                            selected_time=selected_time)
 
 
