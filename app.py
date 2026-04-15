@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, jsonify
 import pandas as pd
 import pickle
 import folium
@@ -53,7 +53,6 @@ def dashboard():
 
     df = get_risk_df()
 
-    # Trend analysis (before filtering)
     trend_summary = df.groupby("Time_Period")["Risk_Score"].mean().reset_index()
     most_risky_period = trend_summary.loc[
         trend_summary["Risk_Score"].idxmax()
@@ -61,23 +60,19 @@ def dashboard():
 
     highest_avg_risk = round(trend_summary["Risk_Score"].max(), 2)
 
-    # Apply filter
     if selected_time != "All":
         df = df[df["Time_Period"] == selected_time]
 
-    # Risk levels
     df["Risk_Level"] = pd.cut(
         df["Risk_Score"],
         bins=[0, 0.4, 0.7, 1],
         labels=["Low", "Medium", "High"]
     )
 
-    # Counts
     low_count = (df["Risk_Level"] == "Low").sum()
     medium_count = (df["Risk_Level"] == "Medium").sum()
     high_count = (df["Risk_Level"] == "High").sum()
 
-    # Top risky zones
     top_zones = df.sort_values("Risk_Score", ascending=False).head(3)
     top_zones_list = top_zones[
         ["Area_Name", "Risk_Score", "Time_Period"]
@@ -108,7 +103,39 @@ def dashboard():
     )
 
 
+# ── Add Data API ──
+@app.route("/add-data", methods=["POST"])
+def add_data():
+    data = request.get_json()
+
+    lat = float(data["Latitude"])
+    lon = float(data["Longitude"])
+
+    # Validate location
+    if not (MIN_LAT <= lat <= MAX_LAT and MIN_LON <= lon <= MAX_LON):
+        return jsonify({
+            "status": "error",
+            "message": "Location outside allowed area"
+        })
+
+    new_row = {
+        "Latitude": lat,
+        "Longitude": lon,
+        "Area_Name": data["Area_Name"],
+        "Time_Period": data["Time_Period"],
+        "Crime_Count": int(data["Crime_Count"]),
+        "Street_Light": data["Street_Light"],
+        "CCTV": data["CCTV"],
+        "Police_Patrol": data["Police_Patrol"],
+        "Isolation_Level": data["Isolation_Level"]
+    }
+
+    df = pd.read_csv("data.csv")
+    df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+    df.to_csv("data.csv", index=False)
+
+    return jsonify({"status": "success"})
+
+
 if __name__ == "__main__":
     app.run(debug=True)
-
-    
