@@ -4,6 +4,7 @@ import pickle
 import folium
 from folium.plugins import HeatMap
 import os
+import json
 
 app = Flask(__name__)
 
@@ -111,7 +112,6 @@ def add_data():
     lat = float(data["Latitude"])
     lon = float(data["Longitude"])
 
-    # Validate location
     if not (MIN_LAT <= lat <= MAX_LAT and MIN_LON <= lon <= MAX_LON):
         return jsonify({
             "status": "error",
@@ -135,6 +135,22 @@ def add_data():
     df.to_csv("data.csv", index=False)
 
     return jsonify({"status": "success"})
+
+
+# ── Safe Route Page ──
+@app.route("/safe-route")
+def safe_route():
+    df = get_risk_df()
+
+    # Send important columns to frontend
+    risk_zones = df[
+        ["Latitude", "Longitude", "Area_Name", "Risk_Score"]
+    ].to_dict(orient="records")
+
+    return render_template(
+        "safe_route.html",
+        risk_zones=json.dumps(risk_zones)
+    )
 
 
 if __name__ == "__main__":
