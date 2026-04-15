@@ -53,10 +53,37 @@ def dashboard():
 
     df = get_risk_df()
 
+    # Trend analysis (before filtering)
+    trend_summary = df.groupby("Time_Period")["Risk_Score"].mean().reset_index()
+    most_risky_period = trend_summary.loc[
+        trend_summary["Risk_Score"].idxmax()
+    ]["Time_Period"]
+
+    highest_avg_risk = round(trend_summary["Risk_Score"].max(), 2)
+
+    # Apply filter
     if selected_time != "All":
         df = df[df["Time_Period"] == selected_time]
 
-    # ── Create Heatmap ──
+    # Risk levels
+    df["Risk_Level"] = pd.cut(
+        df["Risk_Score"],
+        bins=[0, 0.4, 0.7, 1],
+        labels=["Low", "Medium", "High"]
+    )
+
+    # Counts
+    low_count = (df["Risk_Level"] == "Low").sum()
+    medium_count = (df["Risk_Level"] == "Medium").sum()
+    high_count = (df["Risk_Level"] == "High").sum()
+
+    # Top risky zones
+    top_zones = df.sort_values("Risk_Score", ascending=False).head(3)
+    top_zones_list = top_zones[
+        ["Area_Name", "Risk_Score", "Time_Period"]
+    ].to_dict(orient="records")
+
+    # ── Heatmap ──
     m = folium.Map(location=[10.5276, 76.2144], zoom_start=14)
 
     heat_data = [
@@ -66,13 +93,22 @@ def dashboard():
 
     HeatMap(heat_data, radius=30).add_to(m)
 
-    # Save map
     os.makedirs("static", exist_ok=True)
     m.save("static/heatmap.html")
 
-    return render_template("dashboard.html",
-                           selected_time=selected_time)
+    return render_template(
+        "dashboard.html",
+        selected_time=selected_time,
+        low_count=low_count,
+        medium_count=medium_count,
+        high_count=high_count,
+        most_risky_period=most_risky_period,
+        highest_avg_risk=highest_avg_risk,
+        top_zones=top_zones_list
+    )
 
 
 if __name__ == "__main__":
     app.run(debug=True)
+
+    
